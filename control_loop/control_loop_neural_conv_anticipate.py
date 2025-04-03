@@ -20,7 +20,7 @@ import json
 import datetime
 
 
-origin = [-78.11272395775862,-43.90465065906258]
+origin = [-0.135, -0.675]
 
 
 def read_pgm(filename, byteorder='>'):
@@ -110,8 +110,8 @@ class AckermannLineFollower(Node):
         ]
         self.lib.convolve_lidar_scan_c_coarse_fine.restype = None
         self.map_size = 1600
-        self.map_resolution = 0.0625
-        self.map, self.coordinates_with_data = read_pgm('./maps/map4.pgm')
+        self.map_resolution = 0.05
+        self.map, self.coordinates_with_data = read_pgm('./maps/my_map_physical.pgm')
         self.xRange = [-origin[1] / self.map_resolution - 200, -origin[1] / self.map_resolution + 200]
         self.yRange = [-origin[0] / self.map_resolution - 200, -origin[0] / self.map_resolution + 200]
 
@@ -333,8 +333,8 @@ class AckermannLineFollower(Node):
         msg.drive.speed = 5.0  # Constant speed; adjust as needed
         msg.drive.steering_angle = steering_angle
 
-        if self.initizalized:
-            self.publisher_.publish(msg)
+        #if self.initizalized:
+            #self.publisher_.publish(msg)
 
 
 def main(args=None):
