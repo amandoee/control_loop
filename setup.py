@@ -20,7 +20,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'control_loop = control_loop.control_loop_neural_conv_anticipate:main',
+            'control_loop = control_loop.control_keyboard:main',
+
+            #'control_loop = control_loop.control_loop_neural_conv_anticipate:main',
         ],
     },
 )

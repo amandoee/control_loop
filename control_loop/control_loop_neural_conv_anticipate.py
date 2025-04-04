@@ -18,6 +18,7 @@ import math
 import os
 import json
 import datetime
+import matplotlib.pyplot as plt
 
 
 origin = [-0.135, -0.675]
@@ -47,11 +48,14 @@ def read_pgm(filename, byteorder='>'):
         image = image.copy().astype(float)
         for i in range(len(image)):
             for j in range(len(image[i])):
-                if image[i, j] > 0.45:
+                if image[i, j] >=0.45:
                     image[i, j] = 0
                 else:
                     image[i, j] = 1
                     coordinates_with_data[i, j] = 1
+
+        #plot it
+
 
         return image, coordinates_with_data
 
@@ -81,7 +85,6 @@ class AckermannLineFollower(Node):
         self.old_yaw = 1.57079633
 
 
-
         self.old_x = 0.0
         self.old_y = 0.0
         self.old_time = time.time()
@@ -92,7 +95,11 @@ class AckermannLineFollower(Node):
         #self.neuralnet.load_state_dict(torch.load('localization_model.pth'))
         #self.neuralnet.eval()
         
+        #self.lib = ctypes.CDLL('/home/f1t/test_cuda/cuda_test')
         self.lib = ctypes.CDLL('./refined180range.so')
+
+
+        #self.lib = ctypes.CDLL('./refined180range.so')
         self.lib.convolve_lidar_scan_c_coarse_fine.argtypes = [
             np.ctypeslib.ndpointer(dtype=np.double, flags='C_CONTIGUOUS'),
             np.ctypeslib.ndpointer(dtype=np.double, flags='C_CONTIGUOUS'),
@@ -111,15 +118,16 @@ class AckermannLineFollower(Node):
         self.lib.convolve_lidar_scan_c_coarse_fine.restype = None
         self.map_size = 1600
         self.map_resolution = 0.05
-        self.map, self.coordinates_with_data = read_pgm('./maps/my_map_physical.pgm')
-        self.xRange = [-origin[1] / self.map_resolution - 200, -origin[1] / self.map_resolution + 200]
-        self.yRange = [-origin[0] / self.map_resolution - 200, -origin[0] / self.map_resolution + 200]
-
+        self.map, self.coordinates_with_data = read_pgm('./maps/mymapbig1600.pgm')
+        #self.xRange = [-origin[1] / self.map_resolution - 200, -origin[1] / self.map_resolution + 200]
+        #self.yRange = [-origin[0] / self.map_resolution - 200, -origin[0] / self.map_resolution + 200]
+        self.xRange=[700,900]
+        self.yRange=[700,900]
         self.old_target_index = 0
         
         # Load centerline data from CSV
         self.centerline = []
-        file_path = './centerline/map4.csv'
+        file_path = './centerline/custom.csv'
         try:
             with open(file_path, 'r') as csv_file:
                 csv_reader = csv.reader(csv_file)
@@ -164,7 +172,7 @@ class AckermannLineFollower(Node):
         self.publish_circle_marker(xdraw, ydraw, radius=0.05)
 
 
-    def publish_circle_marker(self, x, y, radius=10*0.0625, num_points=50):
+    def publish_circle_marker(self, x, y, radius=10*0.05, num_points=50):
         marker = Marker()
         marker.header.frame_id = "map"  # Adjust if needed to match your RViz frame
         marker.header.stamp = self.get_clock().now().to_msg()
@@ -220,7 +228,7 @@ class AckermannLineFollower(Node):
             print("current y: ", self.current_y)
             print("current yaw: ", self.current_yaw)
             #self.initizalized = True
-            self.publish_circle_marker(self.current_x, self.current_y,radius=self.rangesize*0.0625)
+            self.publish_circle_marker(self.current_x, self.current_y,radius=self.rangesize*0.05)
 
 
         self.old_scan = msg
@@ -280,7 +288,6 @@ class AckermannLineFollower(Node):
             best_xy = np.where(result == best_sum.value)
             if len(best_xy[0]) > 1:
                 best_xy = (np.array([np.mean(best_xy[0])]), np.array([np.mean(best_xy[1])]))
-            
             y_coord = (((800 - abs(origin[1] / self.map_resolution)) * 2 - origin[1] / self.map_resolution) - best_xy[0][0]) * self.map_resolution
             x_coord = (best_xy[1][0] + origin[0] / self.map_resolution) * self.map_resolution
             self.xRange = [int(best_xy[0][0] - self.rangesize), int(best_xy[0][0] + self.rangesize)]
@@ -302,7 +309,6 @@ class AckermannLineFollower(Node):
         
     def control_loop(self):
         if self.target_index >= len(self.centerline):
-            self.target_index = 0
             return
 
         target_x, target_y = self.centerline[self.target_index]
@@ -310,10 +316,18 @@ class AckermannLineFollower(Node):
         dy = target_y - self.current_y
         distance = math.hypot(dx, dy)
 
-        if distance < 1:
+        if distance < 0.2:
             #self.log_waypoint_data()
             self.target_index += 1
             if self.target_index >= len(self.centerline):
+                #Send stop signal
+                msg = AckermannDriveStamped()
+                msg.drive.speed = 0.  # Constant speed; adjust as needed
+                steering_angle = 0.#kp * error_yaw
+
+                msg.drive.steering_angle = steering_angle
+                self.publisher_.publish(msg)
+
                 return
             target_x, target_y = self.centerline[self.target_index]
             dx = target_x - self.current_x
@@ -330,11 +344,15 @@ class AckermannLineFollower(Node):
         steering_angle = kp * error_yaw
 
         msg = AckermannDriveStamped()
-        msg.drive.speed = 5.0  # Constant speed; adjust as needed
+        msg.drive.speed = 1.  # Constant speed; adjust as needed
         msg.drive.steering_angle = steering_angle
 
-        #if self.initizalized:
-            #self.publisher_.publish(msg)
+        print("x: ", self.current_x)
+        print("y: ", self.current_y)
+        print("yaw: ", self.current_yaw)
+
+        if self.initizalized:
+            self.publisher_.publish(msg)
 
 
 def main(args=None):
