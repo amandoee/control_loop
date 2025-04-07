@@ -118,7 +118,7 @@ class AckermannLineFollower(Node):
         self.lib.convolve_lidar_scan_c_coarse_fine.restype = None
         self.map_size = 1600
         self.map_resolution = 0.05
-        self.map, self.coordinates_with_data = read_pgm('./maps/mymapbig1600.pgm')
+        self.map, self.coordinates_with_data = read_pgm('./maps/mymapcircle1600.pgm')
         #self.xRange = [-origin[1] / self.map_resolution - 200, -origin[1] / self.map_resolution + 200]
         #self.yRange = [-origin[0] / self.map_resolution - 200, -origin[0] / self.map_resolution + 200]
         self.xRange=[700,900]
@@ -316,7 +316,7 @@ class AckermannLineFollower(Node):
         dy = target_y - self.current_y
         distance = math.hypot(dx, dy)
 
-        if distance < 0.2:
+        if distance < 0.3:
             #self.log_waypoint_data()
             self.target_index += 1
             if self.target_index >= len(self.centerline):
@@ -324,7 +324,7 @@ class AckermannLineFollower(Node):
                 msg = AckermannDriveStamped()
                 msg.drive.speed = 0.  # Constant speed; adjust as needed
                 steering_angle = 0.#kp * error_yaw
-
+                print("Finished")
                 msg.drive.steering_angle = steering_angle
                 self.publisher_.publish(msg)
 
