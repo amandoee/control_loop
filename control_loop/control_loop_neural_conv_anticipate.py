@@ -21,7 +21,7 @@ import datetime
 import matplotlib.pyplot as plt
 
 
-origin = [-0.135, -0.675]
+origin = [-3.94, -2.76]
 
 
 def read_pgm(filename, byteorder='>'):
@@ -344,7 +344,7 @@ class AckermannLineFollower(Node):
         steering_angle = kp * error_yaw
 
         msg = AckermannDriveStamped()
-        msg.drive.speed = 1.  # Constant speed; adjust as needed
+        msg.drive.speed = 0.1  # Constant speed; adjust as needed
         msg.drive.steering_angle = steering_angle
 
         print("x: ", self.current_x)
