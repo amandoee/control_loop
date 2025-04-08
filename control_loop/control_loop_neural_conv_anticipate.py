@@ -75,7 +75,7 @@ class AckermannLineFollower(Node):
         self.scan_sub = self.create_subscription(LaserScan, 'scan', self.scan_callback, 1)
 
         self.pose_draw_sub = self.create_subscription(Odometry, 'ego_racecar/odom', self.pose_draw_callback, 1)
-
+        self.speed=0.5
 
         #self.estimate_neural = self.create_subscription(LaserScan, 'scan', self.estimate_pose_neural, 1)
         self.timer = self.create_timer(0.001, self.control_loop)
@@ -314,7 +314,7 @@ class AckermannLineFollower(Node):
         dy = target_y - self.current_y
         distance = math.hypot(dx, dy)
 
-        if distance < 0.3:
+        if distance < 0.4:
             #self.log_waypoint_data()
             self.target_index += 1
             if self.target_index >= len(self.centerline):
@@ -334,7 +334,12 @@ class AckermannLineFollower(Node):
         steering_angle = kp * error_yaw
 
         msg = AckermannDriveStamped()
-        msg.drive.speed = 1.  # Constant speed; adjust as needed
+        if self.speed<=2.0:
+            self.speed+=0.01
+            msg.drive.speed = self.speed # Constant speed; adjust as needed
+        else:
+            msg.drive.speed=2.0
+
         msg.drive.steering_angle = steering_angle
 
         print("x: ", self.current_x)
