@@ -21,7 +21,7 @@ import datetime
 import matplotlib.pyplot as plt
 
 
-origin = [-3.94, -2.76]
+origin = [-2.89, -4.06]
 
 
 def read_pgm(filename, byteorder='>'):
@@ -118,7 +118,7 @@ class AckermannLineFollower(Node):
         self.lib.convolve_lidar_scan_c_coarse_fine.restype = None
         self.map_size = 1600
         self.map_resolution = 0.05
-        self.map, self.coordinates_with_data = read_pgm('./maps/mymapcircle1600.pgm')
+        self.map, self.coordinates_with_data = read_pgm('./maps/expandedcircle1600.pgm')
         #self.xRange = [-origin[1] / self.map_resolution - 200, -origin[1] / self.map_resolution + 200]
         #self.yRange = [-origin[0] / self.map_resolution - 200, -origin[0] / self.map_resolution + 200]
         self.xRange=[700,900]
