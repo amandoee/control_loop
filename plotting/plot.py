@@ -52,7 +52,7 @@ def read_pgm(filename, byteorder='>'):
     
         
 # Read CSV file
-df = pd.read_csv('~/sim_ws/lidar_data.csv', sep=";")
+df = pd.read_csv('/home/f1t/au_f1tenth_ws/control_loop/plotting/lidar_data.csv', sep=";")
 
 
 def get_scan_from_index(index):
@@ -146,7 +146,10 @@ def plot_result(output,coordinates_with_data):
 import ctypes
 def convolve_lidar_scan(x_lidar_local, y_lidar_local,coordinates_with_data,orientation_in_rad,xRange,yRange):
     
-    lib = ctypes.CDLL('./lidar_random_sample_log/speeduprefined.so')
+    #lib = ctypes.CDLL('/home/f1t/au_f1tenth_ws/control_loop/refined180range.so')
+
+    lib = ctypes.CDLL('/home/f1t/au_f1tenth_ws/control_loop/plotting/cuda.so')
+
 
     # Set argument types and return type for the C wrapper
     lib.convolve_lidar_scan_c_coarse_fine.argtypes = [
@@ -262,7 +265,7 @@ for i in range(random_sample,random_sample+10):
     print("Start position: ", -origin[0]/resolution+x_coord/resolution, flipped_y_origin-y_coord/resolution, orientation_in_rad)
     targets.append((-origin[0]/resolution+x_coord/resolution,flipped_y_origin-y_coord/resolution))
     #plt.legend()
-    map, coordinates_with_data = read_pgm('./lidar_random_sample_log/maps/map0.pgm')
+    map, coordinates_with_data = read_pgm('/home/f1t/au_f1tenth_ws/control_loop/maps/map0.pgm')
 
 
     xRangeStart = -origin[0]/resolution+x_coord/resolution-33

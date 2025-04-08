@@ -96,8 +96,8 @@ class AckermannLineFollower(Node):
         #self.neuralnet.eval()
         
         #self.lib = ctypes.CDLL('/home/f1t/test_cuda/cuda_test')
-        self.lib = ctypes.CDLL('./refined180range.so')
-
+        
+        self.lib = ctypes.CDLL('/home/f1t/au_f1tenth_ws/control_loop/plotting/cuda.so')
 
         #self.lib = ctypes.CDLL('./refined180range.so')
         self.lib.convolve_lidar_scan_c_coarse_fine.argtypes = [
@@ -334,7 +334,7 @@ class AckermannLineFollower(Node):
         steering_angle = kp * error_yaw
 
         msg = AckermannDriveStamped()
-        msg.drive.speed = 4.  # Constant speed; adjust as needed
+        msg.drive.speed = 1.  # Constant speed; adjust as needed
         msg.drive.steering_angle = steering_angle
 
         print("x: ", self.current_x)
