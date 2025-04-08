@@ -308,8 +308,6 @@ class AckermannLineFollower(Node):
             writer.writerow([timestamp, self.current_x, self.current_y, self.current_yaw, lidar_data])
         
     def control_loop(self):
-        if self.target_index >= len(self.centerline):
-            return
 
         target_x, target_y = self.centerline[self.target_index]
         dx = target_x - self.current_x
@@ -320,15 +318,7 @@ class AckermannLineFollower(Node):
             #self.log_waypoint_data()
             self.target_index += 1
             if self.target_index >= len(self.centerline):
-                #Send stop signal
-                msg = AckermannDriveStamped()
-                msg.drive.speed = 0.  # Constant speed; adjust as needed
-                steering_angle = 0.#kp * error_yaw
-                print("Finished")
-                msg.drive.steering_angle = steering_angle
-                self.publisher_.publish(msg)
-
-                return
+                self.target_index = 0
             target_x, target_y = self.centerline[self.target_index]
             dx = target_x - self.current_x
             dy = target_y - self.current_y
@@ -344,7 +334,7 @@ class AckermannLineFollower(Node):
         steering_angle = kp * error_yaw
 
         msg = AckermannDriveStamped()
-        msg.drive.speed = 1  # Constant speed; adjust as needed
+        msg.drive.speed = 4.  # Constant speed; adjust as needed
         msg.drive.steering_angle = steering_angle
 
         print("x: ", self.current_x)
