@@ -237,6 +237,8 @@ class AckermannLineFollower(Node):
         self.old_scan = msg
 
 
+    def 
+
 
     def scan_callback(self, msg):
         # Store the latest lidar scan
