@@ -11,6 +11,7 @@ from control_loop.lidar_NN import LocalizationNet
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 from visualization_msgs.msg import Marker
+from tf_transformations import euler_from_quaternion
 from std_msgs.msg import ColorRGBA
 from geometry_msgs.msg import Point
 import csv
@@ -76,8 +77,12 @@ class AckermannLineFollower(Node):
         self.publisher_ = self.create_publisher(AckermannDriveStamped, 'drive', 1)
         self.scan_sub = self.create_subscription(LaserScan, 'scan', self.scan_callback, 1)
         
+        
+        self.old_odompose = None
+        self.delta_odompose = None
+        self.pose_draw_sub = self.create_subscription(Odometry, 'ego_racecar/odom', self.odom_callback, 1)
 
-        self.pose_draw_sub = self.create_subscription(Odometry, 'ego_racecar/odom', self.pose_draw_callback, 1)
+
         self.speed=0.7
         self.lap = 0 
         #self.estimate_neural = self.create_subscription(LaserScan, 'scan', self.estimate_pose_neural, 1)
@@ -169,11 +174,39 @@ class AckermannLineFollower(Node):
         self.marker_pub = self.create_publisher(Marker, 'visualization_marker', 1)
 
 
-    def pose_draw_callback(self, msg):
-        # Draw the current pose of the car
-        xdraw = msg.pose.pose.position.x
-        ydraw = msg.pose.pose.position.y
-        self.publish_circle_marker(xdraw, ydraw, radius=0.05)
+    def odom_callback(self, msg):
+        # Calculate the delta from msg odom and old_odompose
+        _,_, new_odomyaw = euler_from_quaternion(
+                msg.pose.pose.orientation.x,
+                msg.pose.pose.orientation.y,
+                msg.pose.pose.orientation.z,
+                msg.pose.pose.orientation.w
+            )
+         
+        if self.old_odompose is not None:
+
+            self.delta_odompose = [
+                msg.pose.pose.position.x - self.old_odompose[0],
+                msg.pose.pose.position.y - self.old_odompose[1],
+                new_odomyaw - self.old_odompose[2]
+            ]
+            self.current_x += self.delta_odompose[0]
+            self.current_y += self.delta_odompose[1]
+            self.current_yaw += self.delta_odompose[2]
+
+            self.old_odompose = [
+                msg.pose.pose.position.x,
+                msg.pose.pose.position.y,
+                new_odomyaw
+            ]
+        else:
+            self.old_odompose = [
+                msg.pose.pose.position.x,
+                msg.pose.pose.position.y,
+                new_odomyaw
+            ]
+
+        #self.publish_circle_marker(xdraw, ydraw, radius=0.05)
 
 
     def publish_circle_marker(self, x, y, radius=10*0.05, num_points=50):
@@ -341,7 +374,7 @@ class AckermannLineFollower(Node):
         steering_angle = kp * error_yaw
 
         msg = AckermannDriveStamped()
-        if self.speed<=4.:
+        if self.speed<=4.0:
             self.speed+=0.008
         if self.lap == 5:
             self.speed = 1.3

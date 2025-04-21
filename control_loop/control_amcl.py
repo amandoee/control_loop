@@ -14,7 +14,9 @@ from visualization_msgs.msg import Marker
 from std_msgs.msg import ColorRGBA
 from geometry_msgs.msg import Point
 import csv
+from tf_transformations import euler_from_quaternion
 import math
+from geometry_msgs.msg import PoseWithCovarianceStamped
 import os
 import json
 import datetime
@@ -74,14 +76,14 @@ class AckermannLineFollower(Node):
         super().__init__('ackermann_line_follower')
         self.initizalized = False
         self.publisher_ = self.create_publisher(AckermannDriveStamped, 'drive', 1)
-        self.scan_sub = self.create_subscription(LaserScan, 'scan', self.scan_callback, 1)
-        
+        #self.scan_sub = self.create_subscription(LaserScan, 'scan', self.scan_callback, 1)
 
-        self.pose_draw_sub = self.create_subscription(Odometry, 'ego_racecar/odom', self.pose_draw_callback, 1)
+        self.robot_pose_sub = self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self.amcl_set_pose, 1)
+        
+        #self.pose_draw_sub = self.create_subscription(Odometry, 'ego_racecar/odom', self.pose_draw_callback, 1)
         self.speed=0.7
         self.lap = 0 
         #self.estimate_neural = self.create_subscription(LaserScan, 'scan', self.estimate_pose_neural, 1)
-        self.timer = self.create_timer(0.001, self.control_loop)
         self.rangesize = 10
 
         self.old_scan = None
@@ -121,7 +123,7 @@ class AckermannLineFollower(Node):
         self.lib.convolve_lidar_scan_c_coarse_fine.restype = None
         self.map_size = 1600
         self.map_resolution = 0.05
-        self.map, self.coordinates_with_data = read_pgm('./maps/my_map_raceline.pgm')
+        self.map, self.coordinates_with_data = read_pgm('./maps/bigassmap.pgm')
         #self.xRange = [min(round(-origin[1] / self.map_resolution - 200),0), max(round(-origin[1] / self.map_resolution + 200), self.map_size-1)]
         #self.yRange = [min(round(-origin[0] / self.map_resolution - 200),0), max(round(-origin[0] / self.map_resolution + 200), self.map_size-1)]
         #print(self.xRange, self.yRange)
@@ -238,6 +240,20 @@ class AckermannLineFollower(Node):
         self.old_scan = msg
 
 
+    def amcl_set_pose(self, msg):
+        #Get the Pose2D from the message
+        self.current_x = msg.pose.pose.position.x
+        self.current_y = msg.pose.pose.position.y
+        
+        quat = msg.pose.pose.orientation
+        _, _, self.current_yaw = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
+        print("current x: ", self.current_x)
+        print("current y: ", self.current_y)
+        print("current yaw: ", self.current_yaw)
+        self.initizalized = True
+        self.control_loop()
+
+
 
     def scan_callback(self, msg):
         # Store the latest lidar scan
@@ -283,10 +299,6 @@ class AckermannLineFollower(Node):
             #If best angle is more different than 90 degrees, it is probably wrong, so we ignore it
             #print("Best angle: ", (float(best_angle.value) - 90))
             #print("Current yaw: ", np.rad2deg(self.current_yaw))
-
-
-
-
 
 
             best_xy = np.where(result == best_sum.value)
@@ -341,7 +353,7 @@ class AckermannLineFollower(Node):
         steering_angle = kp * error_yaw
 
         msg = AckermannDriveStamped()
-        if self.speed<=4.:
+        if self.speed<=4.0:
             self.speed+=0.008
         if self.lap == 5:
             self.speed = 1.3

@@ -23,6 +23,12 @@ setup(
             'control_loop_keyboard = control_loop.control_keyboard:main',
 
             'control_loop = control_loop.control_loop_neural_conv_anticipate:main',
+
+            'control_slam = control_loop.control_slam:main',
+
+            'control_amcl = control_loop.control_amcl:main',
+
+            'control_odom = control_loop.control_loop_neural_conv_anticipate_odom:main'
         ],
     },
 )

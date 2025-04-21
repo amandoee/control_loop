@@ -15,13 +15,14 @@ from std_msgs.msg import ColorRGBA
 from geometry_msgs.msg import Point
 import csv
 import math
+from geometry_msgs.msg import Pose2D
 import os
 import json
 import datetime
 import matplotlib.pyplot as plt
 
 
-origin = [-12.9, -18.7]
+origin = [-11.7, -22.2]
 
 
 def read_pgm(filename, byteorder='>'):
@@ -74,13 +75,14 @@ class AckermannLineFollower(Node):
         super().__init__('ackermann_line_follower')
         self.initizalized = False
         self.publisher_ = self.create_publisher(AckermannDriveStamped, 'drive', 1)
-        self.scan_sub = self.create_subscription(LaserScan, 'scan', self.scan_callback, 1)
+        #self.scan_sub = self.create_subscription(LaserScan, 'scan', self.scan_callback, 1)
 
+        self.robot_pose_sub = self.create_subscription(Pose2D, 'robot_pose', self.slam_set_pose, 1)
+        
         self.pose_draw_sub = self.create_subscription(Odometry, 'ego_racecar/odom', self.pose_draw_callback, 1)
         self.speed=0.7
         self.lap = 0 
         #self.estimate_neural = self.create_subscription(LaserScan, 'scan', self.estimate_pose_neural, 1)
-        self.timer = self.create_timer(0.001, self.control_loop)
         self.rangesize = 10
 
         self.old_scan = None
@@ -237,7 +239,19 @@ class AckermannLineFollower(Node):
         self.old_scan = msg
 
 
-    def 
+    def slam_set_pose(self, msg):
+
+        #Get the Pose2D from the message
+        if self.initizalized:
+            self.current_x = msg.x
+            self.current_y = msg.y
+            self.current_yaw = msg.theta
+            print("current x: ", self.current_x)
+            print("current y: ", self.current_y)
+            print("current yaw: ", self.current_yaw)
+            self.control_loop()
+
+        self.initizalized = True
 
 
     def scan_callback(self, msg):
@@ -286,10 +300,6 @@ class AckermannLineFollower(Node):
             #print("Current yaw: ", np.rad2deg(self.current_yaw))
 
 
-
-
-
-
             best_xy = np.where(result == best_sum.value)
             if len(best_xy[0]) > 1:
                 best_xy = (np.array([np.mean(best_xy[0])]), np.array([np.mean(best_xy[1])]))
@@ -320,7 +330,7 @@ class AckermannLineFollower(Node):
         distance = math.hypot(dx, dy)
 
 
-        while distance < 0.4*self.speed:
+        while distance < 0.7*self.speed:
             #self.log_waypoint_data()
             self.target_index += 1
             if self.target_index >= len(self.centerline):
@@ -342,7 +352,7 @@ class AckermannLineFollower(Node):
         steering_angle = kp * error_yaw
 
         msg = AckermannDriveStamped()
-        if self.speed<=3.0:
+        if self.speed<=2.:
             self.speed+=0.008
         if self.lap == 5:
             self.speed = 1.3
