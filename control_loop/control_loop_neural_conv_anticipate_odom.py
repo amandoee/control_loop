@@ -4,7 +4,7 @@ import time
 from matplotlib import pyplot as plt
 import numpy as np
 import torch
-from control_loop.parent import AckermannLineConvParent
+from control_loop.parent import AckermannLineConvParent, AckermannLineParent
 import rclpy
 from rclpy.node import Node
 from ackermann_msgs.msg import AckermannDriveStamped
@@ -63,6 +63,7 @@ class AckermannLineFollower(AckermannLineConvParent):
                 msg.pose.pose.position.y,
                 new_odomyaw
             ]
+            self.initizalized = True
 
 
 def main(args=None):

@@ -9,13 +9,15 @@ import numpy as np
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 import csv
-from visualization_msgs.msg import Marker
 import math
+from tf_transformations import euler_from_quaternion, quaternion_from_euler
 from std_msgs.msg import ColorRGBA
 from geometry_msgs.msg import Point
 import torch
 import datetime
+from visualization_msgs.msg import Marker
 import json
+from geometry_msgs.msg import PoseWithCovarianceStamped
 
 
 
@@ -32,29 +34,38 @@ class AckermannLineParent(Node):
         self.map_size= 1600
         self.get_map_info(self.map_path+".yaml")
 
-        self.pose_draw_sub = self.create_subscription(Odometry, 'ego_racecar/odom', self.pose_draw_callback, 1)
+        #self.pose_draw_sub = self.create_subscription(Odometry, 'ego_racecar/odom', self.pose_draw_callback, 1)
         self.speed=0.7
         self.lap = 1
         #self.estimate_neural = self.create_subscription(LaserScan, 'scan', self.estimate_pose_neural, 1)
         self.timer = self.create_timer(0.001, self.control_loop)
+        self.logger = self.create_subscription(Odometry, 'ego_racecar/odom', self.log_waypoint_data, 1)
         self.rangesize = 15
 
         self.old_scan = None
 
+        self.max_speed = 6.0
+
+        # Initialize current state variables
+        self.current_x = 0.0
+        self.current_y = 0.0
+        self.current_yaw = np.pi/2
 
         self.current_time = time.time()
 
         
         # Load centerline data from CSV
         self.centerline = []
+        self.target_index = 0
         file_path = self.csv_path+'.csv'
         try:
             with open(file_path, 'r') as csv_file:
                 csv_reader = csv.reader(csv_file)
-                for row in csv_reader:
+                for index, row in enumerate(csv_reader):
                     if len(row) < 2:
                         continue
                     x, y = float(row[0].strip()), float(row[1].strip())
+                    #If distance to point is between 0.5 and 1.0, and y is larger than 0, let this be the first target
                     self.centerline.append((x, y))
         except Exception as e:
             self.get_logger().error(f"Failed to load centerline data: {e}")
@@ -63,14 +74,46 @@ class AckermannLineParent(Node):
             self.get_logger().error("Centerline data is empty!")
         else:
             self.get_logger().info(f"Loaded centerline with {len(self.centerline)} points")
-        
-        # Start following from the second point (first is the spawn point)
-        self.target_index = 1
 
-        # Initialize current state variables
-        self.current_x = 0.0
-        self.current_y = 0.0
-        self.current_yaw = np.pi/2
+            #Create a publisher for initialpsoe
+            self.initial_pose_pub = self.create_publisher(PoseWithCovarianceStamped, 'initialpose', 10)
+            #Create a message for the initialpose
+            initial_pose_msg = PoseWithCovarianceStamped()
+            initial_pose_msg.header.frame_id = "map"
+            initial_pose_msg.header.stamp = self.get_clock().now().to_msg()
+            #Set the initial pose to the first point in the centerline
+            initial_pose_msg.pose.pose.position.x = self.centerline[0][0]
+            initial_pose_msg.pose.pose.position.y = self.centerline[0][1]
+            initial_pose_msg.pose.pose.position.z = 0.0
+            #Set the covariance to 0.1
+            initial_pose_msg.pose.covariance[0] = 0.1
+            initial_pose_msg.pose.covariance[7] = 0.1
+            initial_pose_msg.pose.covariance[14] = 0.1
+            initial_pose_msg.pose.covariance[21] = 0.1
+            initial_pose_msg.pose.covariance[28] = 0.1
+            initial_pose_msg.pose.covariance[35] = 0.1
+            #Set the orientation to the current yaw
+            
+            #Convert the current yaw to quaternion
+            q = quaternion_from_euler(0, 0, self.current_yaw)
+            initial_pose_msg.pose.pose.orientation.x = q[0]
+            initial_pose_msg.pose.pose.orientation.y = q[1]
+            initial_pose_msg.pose.pose.orientation.z = q[2]
+            initial_pose_msg.pose.pose.orientation.w = q[3]
+
+            #Publish the initialpose
+            self.initial_pose_pub.publish(initial_pose_msg)
+            self.get_logger().info(f"Published initial pose: {initial_pose_msg.pose.pose.position.x}, {initial_pose_msg.pose.pose.position.y}")
+
+            self.get_logger().info(f"Initial pose yaw: {euler_from_quaternion([q[0], q[1], q[2], q[3]])[2]}")
+
+
+
+            #Set the initial_pose to the first point in the centerline
+            
+        
+
+
         # Storage for the latest lidar scan
         self.last_scan = None
 
@@ -112,6 +155,7 @@ class AckermannLineParent(Node):
 
 
 
+
     def estimate_pose_neural(self, msg):
         # Given a scan, estimate the next pose based on the change
         if self.old_scan is not None:
@@ -141,23 +185,47 @@ class AckermannLineParent(Node):
             print("current y: ", self.current_y)
             print("current yaw: ", self.current_yaw)
             #self.initizalized = True
-            self.publish_circle_marker(self.current_x, self.current_y,radius=self.rangesize*0.05)
+            #self.publish_circle_marker(self.current_x, self.current_y,radius=self.rangesize*0.05)
 
 
         self.old_scan = msg
 
 
 
-
-    def log_waypoint_data(self):
+    def log_waypoint_data(self,msg):
+        #get odometry data
+        odom_x = msg.pose.pose.position.x
+        odom_y = msg.pose.pose.position.y
+        odom_yaw = euler_from_quaternion(
+            [msg.pose.pose.orientation.x,
+            msg.pose.pose.orientation.y,
+            msg.pose.pose.orientation.z,
+            msg.pose.pose.orientation.w]
+        )[2]
+        #get the current time
         timestamp = datetime.datetime.now().isoformat()
-        lidar_data = json.dumps(list(self.last_scan.ranges)) if self.last_scan is not None else "None"        
-        with open(self.movement_data_file, 'a', newline='') as csv_file:
-            writer = csv.writer(csv_file, delimiter=";")
-            writer.writerow([timestamp, self.current_x, self.current_y, self.current_yaw, lidar_data])
+        #Note the estimated current pose, as well as odometry's current pose
+        data = {
+            'timestamp': timestamp,
+            'current_x': self.current_x,
+            'current_y': self.current_y,
+            'current_yaw': self.current_yaw,
+            'ground_truth_x': odom_x,
+            'ground_truth_y': odom_y,
+            'ground_truth_yaw': odom_yaw,
+            'lap': self.lap,
+        }
+        # Write the data to a CSV file
+        file_path = './logged_data.csv'
+        with open(file_path, 'a') as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=data.keys())
+            # Write the header only if the file is empty
+            if csv_file.tell() == 0:
+                writer.writeheader()
+            writer.writerow(data)
         
-    def control_loop(self):
 
+    def control_loop(self):
         target_x, target_y = self.centerline[self.target_index]
         dx = target_x - self.current_x
         dy = target_y - self.current_y
@@ -183,7 +251,7 @@ class AckermannLineParent(Node):
         steering_angle = kp * error_yaw
 
         msg = AckermannDriveStamped()
-        if self.speed<=6.:
+        if self.speed<=self.max_speed:
             self.speed+=0.05
         if self.lap == 5:
             self.speed = 1.3
@@ -195,9 +263,9 @@ class AckermannLineParent(Node):
             self.speed=1.3
             msg.drive.speed=1.
         msg.drive.steering_angle = steering_angle
-        print("x: ", self.current_x)
-        print("y: ", self.current_y)
-        print("yaw: ", self.current_yaw)
+        # print("x: ", self.current_x)
+        # print("y: ", self.current_y)
+        # print("yaw: ", self.current_yaw)
         if self.initizalized:
             self.publisher_.publish(msg)
 
@@ -278,32 +346,20 @@ class AckermannLineConvParent(AckermannLineParent):
         ]
         self.lib.convolve_lidar_scan_c_coarse_fine.restype = None
         self.map, self.coordinates_with_data = self.read_pgm(self.map_path+'.pgm')
-        plt.imshow(self.map, cmap='gray',alpha=0.5)
+        plt.imshow(self.coordinates_with_data, cmap='gray',alpha=0.5)
         flipped_y_origin = (800 - abs(self.origin[1]/self.map_resolution))*2-self.origin[1]/self.map_resolution
-        plt.scatter(-self.origin[0] / self.map_resolution, flipped_y_origin, c='red', s=100)
+        
+        plt.scatter(-self.origin[0] / self.map_resolution+self.centerline[0][0]/self.map_resolution, flipped_y_origin-self.centerline[0][1]/self.map_resolution, c='red', s=100)
         plt.show()
 
         #print(self.xRange, self.yRange)
-        print(-self.origin[0]/self.map_resolution,flipped_y_origin)
-        print("\n<--------------------->\n")
-        print("\n<--------------------->\n")
-        print("\n<--------------------->\n")
-        print("\n<--------------------->\n")
-        print("\n<--------------------->\n")
-        print("\n<--------------------->\n")
-        print("\n<--------------------->\n")
-        print("\n<--------------------->\n")
 
-
-        self.yRange=[1200,1300]
-        self.xRange=[850,950]
 
 
         startsize=100
-        self.xRange = [max(round(flipped_y_origin - startsize),0), min(round(flipped_y_origin + startsize), self.map_size-1)]
-        self.yRange = [max(round(-self.origin[0] / self.map_resolution - startsize),0), min(round(-self.origin[0] / self.map_resolution + startsize), self.map_size-1)]
+        self.xRange = [max(round(flipped_y_origin-self.centerline[0][1]/self.map_resolution - startsize),0), min(round(flipped_y_origin-self.centerline[0][1]/self.map_resolution + startsize), self.map_size-1)]
+        self.yRange = [max(round(-self.origin[0] / self.map_resolution+self.centerline[0][0]/self.map_resolution - startsize),0), min(round(-self.origin[0] / self.map_resolution+self.centerline[0][0]/self.map_resolution + startsize), self.map_size-1)]
 
-        print(self.xRange, self.yRange)
 
     def scan_callback(self, msg):
             # Store the latest lidar scan
@@ -357,7 +413,6 @@ class AckermannLineConvParent(AckermannLineParent):
                 y_coord = (((800 - abs(self.origin[1] / self.map_resolution)) * 2 - self.origin[1] / self.map_resolution) - best_xy[0][0]) * self.map_resolution
                 x_coord = (best_xy[1][0] + self.origin[0] / self.map_resolution) * self.map_resolution
 
-                print(y_coord, x_coord)
                 self.xRange = [int(best_xy[0][0] - self.rangesize), int(best_xy[0][0] + self.rangesize)]
                 self.yRange = [int(best_xy[1][0] - self.rangesize), int(best_xy[1][0] + self.rangesize)]
 
@@ -369,5 +424,3 @@ class AckermannLineConvParent(AckermannLineParent):
                 self.initizalized = True
                 # Publish a marker circle around the updated current pose
                 self.publish_circle_marker(self.current_x, self.current_y)
-        
-    

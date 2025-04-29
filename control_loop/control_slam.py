@@ -21,13 +21,15 @@ import os
 import json
 import datetime
 import matplotlib.pyplot as plt
-
+from tf_transformations import euler_from_quaternion
 
 
 class AckermannLineFollower(AckermannLineParent):
     def __init__(self):
         AckermannLineParent.__init__(self)
-        self.robot_pose_sub = self.create_subscription(Pose2D, 'robot_pose', self.slam_set_pose, 1)
+        #self.robot_pose_sub = self.create_subscription(Pose2D, 'robot_pose', self.slam_set_pose, 1)
+        self.odom_subber = self.create_subscription(Odometry, 'ego_racecar/odom', self.slam_set_pose_odom, 1)
+        self.max_speed=5.
 
 
     def slam_set_pose(self, msg):
@@ -39,8 +41,23 @@ class AckermannLineFollower(AckermannLineParent):
             print("current x: ", self.current_x)
             print("current y: ", self.current_y)
             print("current yaw: ", self.current_yaw)
-            self.control_loop()
+        self.initizalized = True
 
+
+    def slam_set_pose_odom(self,msg):
+        #Get the Odometry from the message
+        if self.initizalized:
+            self.current_x = msg.pose.pose.position.x
+            self.current_y = msg.pose.pose.position.y
+            _, _, self.current_yaw = euler_from_quaternion([msg.pose.pose.orientation.x,
+                                                         msg.pose.pose.orientation.y,
+                                                         msg.pose.pose.orientation.z,
+                                                         msg.pose.pose.orientation.w])
+            
+            
+            print("current x: ", self.current_x)
+            print("current y: ", self.current_y)
+            print("current yaw: ", self.current_yaw)
         self.initizalized = True
 
 
