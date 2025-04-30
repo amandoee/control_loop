@@ -53,6 +53,10 @@ class AckermannLineParent(Node):
 
         self.current_time = time.time()
 
+        self.previous_error_yaw = 0.0
+        self.last_control_time = self.get_clock().now()
+
+
         
         # Load centerline data from CSV
         self.centerline = []
@@ -116,11 +120,9 @@ class AckermannLineParent(Node):
 
             self.get_logger().info(f"Initial pose yaw: {euler_from_quaternion([q[0], q[1], q[2], q[3]])[2]}")
 
-
-
-            #Set the initial_pose to the first point in the centerline
             
-        
+            #reset odometry topic
+
 
 
         # Storage for the latest lidar scan
@@ -235,6 +237,11 @@ class AckermannLineParent(Node):
         
 
     def control_loop(self):
+
+        current_time = self.get_clock().now()
+        
+
+
         target_x, target_y = self.centerline[self.target_index]
         dx = target_x - self.current_x
         dy = target_y - self.current_y
@@ -256,8 +263,19 @@ class AckermannLineParent(Node):
         desired_yaw = math.atan2(dy, dx)
         error_yaw = desired_yaw - self.current_yaw
         error_yaw = math.atan2(math.sin(error_yaw), math.cos(error_yaw))
+
+        dt = (current_time - self.last_control_time).nanoseconds / 1e9
+        self.last_control_time = current_time
+        error_derivative = 0.0
+        if dt > 1e-6:
+            error_derivative = (error_yaw - self.previous_error_yaw) / dt
+        
+        self.previous_error_yaw = error_yaw
+
+
         kp = 0.50  # Adjust gain as needed
-        steering_angle = kp * error_yaw
+        kd= 0.06
+        steering_angle = kp * error_yaw + kd * error_derivative
 
         msg = AckermannDriveStamped()
         if self.speed<=self.max_speed:

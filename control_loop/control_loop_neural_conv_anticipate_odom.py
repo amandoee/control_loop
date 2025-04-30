@@ -29,18 +29,21 @@ class AckermannLineFollower(AckermannLineConvParent):
         AckermannLineConvParent.__init__(self)
         self.old_odompose = None
         self.delta_odompose = None
-        self.cumulative_delta = [0,0]
-        self.delta_since_lost = [0,0]
-
-        self.last_reliable_position = None
-
+        self.cumulative_delta = [0,0,0]
         self.odom_sub = self.create_subscription(Odometry, 'ego_racecar/odom', self.odom_callback, 1)
+
+        self.driftpose = None
+        self.driftodom = None
+        self.has_drifted = False
+
+        self.drift_detection_timer = self.create_timer(0.05, self.drift_detection)
+
+
         
     def scan_callback(self, msg):
             # Store the latest lidar scan
             self.last_scan = msg
 
-            print("Scan callback for verification that override is working")
 
             result = np.zeros((self.map_size, self.map_size), dtype=np.int32)
             best_sum = ctypes.c_int(-1)
@@ -90,92 +93,111 @@ class AckermannLineFollower(AckermannLineConvParent):
                 y_coord = (((800 - abs(self.origin[1] / self.map_resolution)) * 2 - self.origin[1] / self.map_resolution) - best_xy[0][0]) * self.map_resolution
                 x_coord = (best_xy[1][0] + self.origin[0] / self.map_resolution) * self.map_resolution
 
-                print("Best xy: ", x_coord, y_coord)
-
-                #In odom version, we set the new range as the odometry estimate of where we are
-
-                #self.xRange = [int(best_xy[0][0]+self.cumulative_delta[1]/self.map_resolution - self.rangesize), int(best_xy[0][0]+self.cumulative_delta[1]/self.map_resolution + self.rangesize)]
-                #self.yRange = [int(best_xy[1][0]+self.cumulative_delta[0]/self.map_resolution - self.rangesize), int(best_xy[1][0]+self.cumulative_delta[0]/self.map_resolution + self.rangesize)]
-                
 
 
-                #Calculate the difference between self_current.x,self_current.y and the best_xy
-                distance_scan = math.sqrt((self.current_x - x_coord)**2 + (self.current_y - y_coord)**2)
-                distance_odom = math.sqrt((self.delta_since_lost[0]+self.cumulative_delta[0])**2 + (self.delta_since_lost[1]+self.cumulative_delta[1])**2)
-
-                #Convert to map coordinates
-
-
-                #If the two distances are more than 10% apart, ignore the scan estimate
-                try:
-                    percentage_difference = abs(distance_odom - distance_scan) / ((distance_odom+ distance_scan)/2)
-                except:
-                    percentage_difference=0.
-                
-                print("Percentage difference: ", percentage_difference)
-
-                if percentage_difference > 1 and self.initizalized:
-                    self.current_x+=self.cumulative_delta[0]
-                    self.current_y+=self.cumulative_delta[1]
-
-                    self.delta_since_lost = [self.delta_since_lost[0]+self.cumulative_delta[0], self.delta_since_lost[1]+self.cumulative_delta[1]]
-
-            
-                    #Set the new ranges based on the current position
+                if self.has_drifted:
+                    self._logger.info("running on odom")
+                    self.current_x = self.current_x + self.cumulative_delta[0]
+                    self.current_y = self.current_y + self.cumulative_delta[1]
+                    self.current_yaw = self.current_yaw + self.cumulative_delta[2]
                     
-                    self.xRange = [int(best_xy[0][0]+self.delta_since_lost[0]/self.map_resolution - self.rangesize), int(best_xy[0][0]+self.delta_since_lost[0]/self.map_resolution + self.rangesize)]
-                    self.yRange = [int(best_xy[1][0]+self.delta_since_lost[1]/self.map_resolution - self.rangesize), int(best_xy[1][0]+self.delta_since_lost[1]/self.map_resolution + self.rangesize)]
+
+                    flipped_y_origin = (800 - abs(self.origin[1]/self.map_resolution))*2-self.origin[1]/self.map_resolution
                     
-                    print("Ignoring scan estimate")
+                    #set axis as 0-1600
+                    #plt.axis([0, 1600, 0, 1600])
+                    #plt.scatter(-self.origin[0] / self.map_resolution+self.current_x/self.map_resolution, flipped_y_origin-self.current_y/self.map_resolution, c='red', s=100)
+                    #plt.imshow(self.coordinates_with_data, cmap='gray', extent=[-self.origin[0], 1600-self.origin[0], -self.origin[1], 1600-self.origin[1]], alpha=0.5)
+                    #plt.show()
+
+                    y_estimate = -self.origin[0] / self.map_resolution+self.current_x/self.map_resolution
+                    x_estimate = flipped_y_origin-self.current_y/self.map_resolution
+
+                    self.xRange = [int(x_estimate - self.rangesize), int(x_estimate + self.rangesize)]
+                    self.yRange = [int(y_estimate - self.rangesize), int(y_estimate + self.rangesize)]
+                    
+
+
                 else:
-
-                    self.current_x = x_coord#(x_coord + self.current_x)/2
-                    self.current_y = y_coord#(y_coord + self.current_y)/2
-                    
-                    self.delta_since_lost = [0,0]
-
-                    print("Potentially fucked ")
-
-                    print("---")
                     self.xRange = [int(best_xy[0][0] - self.rangesize), int(best_xy[0][0] + self.rangesize)]
                     self.yRange = [int(best_xy[1][0] - self.rangesize), int(best_xy[1][0] + self.rangesize)]
+                    
+                    # Update current pose based on the processed scan
+                    self.current_x = x_coord#(x_coord + self.current_x)/2
+                    self.current_y = y_coord#(y_coord + self.current_y)/2
+                    self.current_yaw = np.deg2rad(float(best_angle.value) - 90)
 
 
-                print("deltas: ", self.cumulative_delta)
-                self.cumulative_delta = [0, 0]
 
+                self.cumulative_delta = [0, 0, 0]
 
-                print(self.xRange)
-                print(self.yRange)
-
-                # Update current pose based on the processed scan
-
-                self.current_yaw = np.deg2rad(float(best_angle.value) - 90)
                 self.initizalized = True
                 # Publish a marker circle around the updated current pose
                 self.publish_circle_marker(self.current_x, self.current_y)
         
     def odom_callback(self, msg):
          
+        #Get yaw from odometry
+        quat = msg.pose.pose.orientation
+        _, _, msg_yaw = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
+
+
         if self.old_odompose is not None:
 
             self.delta_odompose = [
                 msg.pose.pose.position.x - self.old_odompose[0],
                 msg.pose.pose.position.y - self.old_odompose[1],
+                msg_yaw - self.old_odompose[2]
             ]
  
-            self.cumulative_delta = [self.cumulative_delta[0]+self.delta_odompose[0], self.cumulative_delta[1]+self.delta_odompose[1]]
+            self.cumulative_delta = [self.delta_odompose[0]+self.cumulative_delta[0], self.delta_odompose[1]+self.cumulative_delta[1], self.delta_odompose[2]+self.cumulative_delta[2]]
             
             self.old_odompose = [
                 msg.pose.pose.position.x,
                 msg.pose.pose.position.y,
+                msg_yaw
             ]
 
-        else:
+        elif self.initizalized:
             self.old_odompose = [
                 msg.pose.pose.position.x,
                 msg.pose.pose.position.y,
+                msg_yaw
             ]
+
+
+    def drift_detection(self):
+        #Calculate diffrence between current_x and current_y and the cumulative delta
+
+        if self.driftpose is not None and self.driftodom is not None:
+
+
+            diff_x = self.driftpose[0] - self.current_x
+            diff_y = self.driftpose[1] - self.current_y
+
+            diff_odom_x = self.driftodom[0] - self.old_odompose[0]
+            diff_odom_y = self.driftodom[1] - self.old_odompose[1]
+
+            #Check if differences are similar
+            percentage_diff_x = abs(abs(diff_x-diff_odom_x) / ((diff_x+diff_odom_x)/2))
+            percentage_diff_y = abs(abs(diff_y-diff_odom_y) / ((diff_y+diff_odom_y)/2))
+            #If the difference is greater than 10%, we have a drift
+
+
+            self._logger.info(f"Drift detection: {percentage_diff_x}, {percentage_diff_y}")
+            if (percentage_diff_x > 0.05 or percentage_diff_y > 0.05) and self.speed >= 5.:
+                self._logger.info("Drift detected")
+                self.has_drifted = True
+            else:
+                self.has_drifted = False
+                
+
+                
+                
+        elif self.old_odompose is not None and self.initizalized:
+            self.driftpose = [self.current_x, self.current_y]
+            self.driftodom = [self.old_odompose[0], self.old_odompose[1]]
+
 
 
 def main(args=None):
