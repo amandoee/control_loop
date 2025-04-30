@@ -49,7 +49,7 @@ class AckermannLineParent(Node):
         # Initialize current state variables
         self.current_x = 0.0
         self.current_y = 0.0
-        self.current_yaw = np.pi/2
+        self.current_yaw = 0.5
 
         self.current_time = time.time()
 
@@ -94,8 +94,17 @@ class AckermannLineParent(Node):
             initial_pose_msg.pose.covariance[35] = 0.1
             #Set the orientation to the current yaw
             
-            #Convert the current yaw to quaternion
-            q = quaternion_from_euler(0, 0, self.current_yaw)
+            #Calculate the angle between the first two points in the centerline
+            initial_yaw = 0.0
+            if len(self.centerline) > 1:
+                dx = self.centerline[1][0] - self.centerline[0][0]
+                dy = self.centerline[1][1] - self.centerline[0][1]
+                initial_yaw = math.atan2(dy, dx)
+
+
+
+
+            q = quaternion_from_euler(0, 0, initial_yaw)
             initial_pose_msg.pose.pose.orientation.x = q[0]
             initial_pose_msg.pose.pose.orientation.y = q[1]
             initial_pose_msg.pose.pose.orientation.z = q[2]
@@ -413,13 +422,13 @@ class AckermannLineConvParent(AckermannLineParent):
                 y_coord = (((800 - abs(self.origin[1] / self.map_resolution)) * 2 - self.origin[1] / self.map_resolution) - best_xy[0][0]) * self.map_resolution
                 x_coord = (best_xy[1][0] + self.origin[0] / self.map_resolution) * self.map_resolution
 
+
                 self.xRange = [int(best_xy[0][0] - self.rangesize), int(best_xy[0][0] + self.rangesize)]
                 self.yRange = [int(best_xy[1][0] - self.rangesize), int(best_xy[1][0] + self.rangesize)]
 
-
                 # Update current pose based on the processed scan
-                self.current_x = (x_coord + self.current_x)/2
-                self.current_y = (y_coord + self.current_y)/2
+                self.current_x = x_coord#(x_coord + self.current_x)/2
+                self.current_y = y_coord#(y_coord + self.current_y)/2
                 self.current_yaw = np.deg2rad(float(best_angle.value) - 90)
                 self.initizalized = True
                 # Publish a marker circle around the updated current pose
