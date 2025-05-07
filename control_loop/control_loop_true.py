@@ -29,10 +29,11 @@ import matplotlib.pyplot as plt
 class AckermannLineFollower(AckermannLineParent):
     def __init__(self):
         AckermannLineParent.__init__(self)
-        self.max_speed = 7.
-        self.robot_pose_sub = self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self.amcl_set_pose, 1)
+        self.true_pose = self.create_subscription(Odometry, 'ego_racecar/odom', self.set_pose, 1)
+        self._logger.info("True pose subscriber initialized")
+        self.max_speed = 3.
 
-    def amcl_set_pose(self, msg):
+    def set_pose(self, msg):
         #Get the Pose2D from the message
         self.current_x = msg.pose.pose.position.x
         self.current_y = msg.pose.pose.position.y
@@ -41,6 +42,7 @@ class AckermannLineFollower(AckermannLineParent):
         _, _, self.current_yaw = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
 
         self.initizalized = True
+
 
 
 def main(args=None):

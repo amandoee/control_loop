@@ -27,16 +27,17 @@ class AckermannLineParent(Node):
         self.initizalized = False
         self.publisher_ = self.create_publisher(AckermannDriveStamped, 'drive', 1)
         
+
+        
         self.declare_parameter('map_path', '')
         self.map_path = self.get_parameter('map_path').get_parameter_value().string_value
         self.declare_parameter('csv_path', '')
         self.csv_path = self.get_parameter('csv_path').get_parameter_value().string_value
-        self.map_size= 1600
         self.get_map_info(self.map_path+".yaml")
 
         #self.pose_draw_sub = self.create_subscription(Odometry, 'ego_racecar/odom', self.pose_draw_callback, 1)
         self.speed=0.7
-        self.lap = 1
+        self.lap = 0
         #self.estimate_neural = self.create_subscription(LaserScan, 'scan', self.estimate_pose_neural, 1)
         self.timer = self.create_timer(0.001, self.control_loop)
         self.logger = self.create_subscription(Odometry, 'ego_racecar/odom', self.log_waypoint_data, 1)
@@ -44,7 +45,13 @@ class AckermannLineParent(Node):
 
         self.old_scan = None
 
-        self.max_speed = 6.0
+        self.old_estimate_pose = None
+
+        self.max_speed = 8.0
+        self.map_size = 0
+        self.jumped_past = False
+
+
 
         # Initialize current state variables
         self.current_x = 0.0
@@ -218,6 +225,7 @@ class AckermannLineParent(Node):
         #Note the estimated current pose, as well as odometry's current pose
         data = {
             'timestamp': timestamp,
+            'current_speed': self.speed,
             'current_x': self.current_x,
             'current_y': self.current_y,
             'current_yaw': self.current_yaw,
@@ -227,7 +235,7 @@ class AckermannLineParent(Node):
             'lap': self.lap,
         }
         # Write the data to a CSV file
-        file_path = './logged_data.csv'
+        file_path = './logged_data'+'with_speed_'+str(self.max_speed)+'.csv'
         with open(file_path, 'a') as csv_file:
             writer = csv.DictWriter(csv_file, fieldnames=data.keys())
             # Write the header only if the file is empty
@@ -235,6 +243,8 @@ class AckermannLineParent(Node):
                 writer.writeheader()
             writer.writerow(data)
         
+    
+
 
     def control_loop(self):
 
@@ -245,11 +255,18 @@ class AckermannLineParent(Node):
         target_x, target_y = self.centerline[self.target_index]
         dx = target_x - self.current_x
         dy = target_y - self.current_y
+
+
         distance = math.hypot(dx, dy)
 
+        if self.old_estimate_pose is not None:
+            #Calculate line between old and current. If the line has passed the target, increase the target
+            self.check_jump(target_x,target_y)
 
-        while distance < 1.:#*self.speed:
+
+        while self.jumped_past or distance < 1:
             #self.log_waypoint_data()
+            self.jumped_past = False
             self.target_index += 1
             if self.target_index >= len(self.centerline):
                 self.target_index = 0
@@ -258,6 +275,7 @@ class AckermannLineParent(Node):
             dx = target_x - self.current_x
             dy = target_y - self.current_y
             distance = math.hypot(dx, dy)
+            self.check_jump(target_x,target_y)
 
 
         desired_yaw = math.atan2(dy, dx)
@@ -278,17 +296,27 @@ class AckermannLineParent(Node):
         steering_angle = kp * error_yaw + kd * error_derivative
 
         msg = AckermannDriveStamped()
+
+        self.old_estimate_pose = [self.current_x,self.current_y]
+
+
         if self.speed<=self.max_speed:
             self.speed+=0.05
-        if self.lap == 5:
-            self.speed = 1.3
-        if self.lap >= 6:
+
+        if self.lap >= 4:
             self.speed = 0
+
+           #Stop the car after 4 laps and publish the final data
+            self.log_waypoint_data(msg)
+            self.get_logger().info("Stopping car after 4 laps")
+
+
         msg.drive.speed=self.speed/(1+abs(error_yaw/2.5))
         
-        if self.lap == 0:
-            self.speed=1.3
-            msg.drive.speed=1.
+        # if self.lap == 0:
+        #     self.speed=1.3
+        #     msg.drive.speed=1. Only necessary for real car testing
+
         msg.drive.steering_angle = steering_angle
         # print("x: ", self.current_x)
         # print("y: ", self.current_y)
@@ -296,6 +324,19 @@ class AckermannLineParent(Node):
         if self.initizalized:
             self.publisher_.publish(msg)
 
+    def check_jump(self,target_x,target_y):
+            x_linspace = np.linspace(self.old_estimate_pose[0],self.current_x,5)
+            y_linspace = np.linspace(self.old_estimate_pose[1],self.current_y,5)
+
+                #Check if any distance was under 1:
+
+            for pair in zip(x_linspace,y_linspace):
+                    dx_line = math.hypot(target_x - pair[0], target_y-pair[1])
+                    if dx_line < 1:
+                        self.jumped_past = True
+                        self._logger.info(f"Jumped past target: {pair[0]}, {pair[1]}")
+                        break
+            return
 
     def read_pgm(self,filename, byteorder='>'):
         with open(filename, 'rb') as f:
@@ -311,23 +352,31 @@ class AckermannLineParent(Node):
             height = int(height)
             maxval = int(maxval)
 
+            #max size of width and height
+            max_size = max(width, height)
+            self.map_size = max_size
+
             # Convert to numpy array
             image = np.frombuffer(buffer, dtype='u1' if maxval < 256 else byteorder+'u2',
                                     count=int(width)*int(height), offset=len(header)).reshape((int(height), int(width)))
 
             coordinates_with_data = np.array(image, dtype=np.int32)
-
-            image_ouput = np.full((1600, 1600), 0)
+            
+            image_ouput = np.full((max_size, max_size), 0)
             image_ouput = image_ouput.copy().astype(np.int32)
             # If image values are greater than occupied_thresh, set to 1, else 0
             image = image.copy().astype(float)
+
+            #If image is not 1600x1600, pad it
             for i in range(len(image)):
                 for j in range(len(image[i])):
                     if image[i, j] >=0.45:
-                        image_ouput[i+1599-height, j] = 0
+                        image_ouput[i+max_size-1-height, j] = 0
                     else:
-                        image_ouput[i+1599-height, j] = 1
+                        image_ouput[i+max_size-1-height, j] = 1
                         coordinates_with_data[i, j] = 1
+
+            #if image is larger than 1600x1600, crop it
 
             #plot it
 
@@ -355,7 +404,7 @@ class AckermannLineConvParent(AckermannLineParent):
         
         #self.lib = ctypes.CDLL('/home/f1t/au_f1tenth_ws/control_loop/plotting/cuda.so')
 
-        self.lib = ctypes.CDLL('/home/amandoee/control_loop/refined180range.so')
+        self.lib = ctypes.CDLL('/home/amandoee/control_loop/speeduprefined_dynamicmap.so')
         self.lib.convolve_lidar_scan_c_coarse_fine.argtypes = [
             np.ctypeslib.ndpointer(dtype=np.double, flags='C_CONTIGUOUS'),
             np.ctypeslib.ndpointer(dtype=np.double, flags='C_CONTIGUOUS'),
@@ -369,15 +418,16 @@ class AckermannLineConvParent(AckermannLineParent):
             ctypes.c_int,
             np.ctypeslib.ndpointer(dtype=np.int32, flags='C_CONTIGUOUS'),
             ctypes.POINTER(ctypes.c_int),
-            ctypes.POINTER(ctypes.c_int)
+            ctypes.POINTER(ctypes.c_int),
+            ctypes.c_int,
         ]
         self.lib.convolve_lidar_scan_c_coarse_fine.restype = None
         self.map, self.coordinates_with_data = self.read_pgm(self.map_path+'.pgm')
-        plt.imshow(self.coordinates_with_data, cmap='gray',alpha=0.5)
-        flipped_y_origin = (800 - abs(self.origin[1]/self.map_resolution))*2-self.origin[1]/self.map_resolution
+        #plt.imshow(self.coordinates_with_data, cmap='gray',alpha=0.5)
+        flipped_y_origin = (self.map_size/2 - abs(self.origin[1]/self.map_resolution))*2-self.origin[1]/self.map_resolution
         
-        plt.scatter(-self.origin[0] / self.map_resolution+self.centerline[0][0]/self.map_resolution, flipped_y_origin-self.centerline[0][1]/self.map_resolution, c='red', s=100)
-        plt.show()
+        #plt.scatter(-self.origin[0] / self.map_resolution+self.centerline[0][0]/self.map_resolution, flipped_y_origin-self.centerline[0][1]/self.map_resolution, c='red', s=100)
+        #plt.show()
 
         #print(self.xRange, self.yRange)
 
@@ -426,7 +476,8 @@ class AckermannLineConvParent(AckermannLineParent):
                     90,
                     result.ravel(),
                     ctypes.byref(best_sum),
-                    ctypes.byref(best_angle)
+                    ctypes.byref(best_angle),
+                    int(self.map_size)
                 )
 
                 #If best angle is more different than 90 degrees, it is probably wrong, so we ignore it
@@ -437,12 +488,14 @@ class AckermannLineConvParent(AckermannLineParent):
                 best_xy = np.where(result == best_sum.value)
                 if len(best_xy[0]) > 1:
                     best_xy = (np.array([np.mean(best_xy[0])]), np.array([np.mean(best_xy[1])]))
-                y_coord = (((800 - abs(self.origin[1] / self.map_resolution)) * 2 - self.origin[1] / self.map_resolution) - best_xy[0][0]) * self.map_resolution
+                y_coord = (((self.map_size/2 - abs(self.origin[1] / self.map_resolution)) * 2 - self.origin[1] / self.map_resolution) - best_xy[0][0]) * self.map_resolution
                 x_coord = (best_xy[1][0] + self.origin[0] / self.map_resolution) * self.map_resolution
 
 
-                self.xRange = [int(best_xy[0][0] - self.rangesize), int(best_xy[0][0] + self.rangesize)]
-                self.yRange = [int(best_xy[1][0] - self.rangesize), int(best_xy[1][0] + self.rangesize)]
+                self.xRange = [max(0, int(best_xy[0][0] - self.rangesize)), min(self.map_size - 1, int(best_xy[0][0] + self.rangesize))]
+                self.yRange = [max(0, int(best_xy[1][0] - self.rangesize)), min(self.map_size - 1, int(best_xy[1][0] + self.rangesize))]
+                self._logger.info(f"X range: {self.xRange}")
+                self._logger.info(f"Y range: {self.yRange}")
 
                 # Update current pose based on the processed scan
                 self.current_x = x_coord#(x_coord + self.current_x)/2

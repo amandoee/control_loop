@@ -21,7 +21,8 @@ int compute_convolution_score(
     int startY,
     int endY,
     const double startAngle,
-    const int windowsize)
+    const int windowsize,
+    const int mapsize)
 {
     // Reset the region in convResult to zero
     for (int i = startX; i < endX; ++i) {
@@ -47,7 +48,7 @@ int compute_convolution_score(
             for (const auto& pt : xyPairsScaled) {
                 int x = pt.first + i;
                 int y = pt.second + j;
-                if (x >= 0 && x < 1600 && y >= 0 && y < 1600 && occupancyMap[x][y] == 1) {
+                if (x >= 0 && x < mapsize && y >= 0 && y < mapsize && occupancyMap[x][y] == 1) {
                     current += occupancyMap[x][y];
                 }
             }
@@ -72,23 +73,23 @@ extern "C" void convolve_lidar_scan_c_coarse_fine(
     const int endY,
     const double startAngle,
     const int windowsize,
-    int* result, int* sum, int* bestAngle)
+    int* result, int* sum, int* bestAngle,const int mapsize)
 {
     // Convert raw lidar arrays into vectors.
     std::vector<double> x_lidar_local(x_lidar, x_lidar + numPoints);
     std::vector<double> y_lidar_local(y_lidar, y_lidar + numPoints);
 
     // Convert flattened occupancyMap into a 2D vector.
-    std::vector<std::vector<int>> occupancyMap(1600, std::vector<int>(1600, 0));
-    for (int i = 0; i < 1600; ++i) {
-        for (int j = 0; j < 1600; ++j) {
-            occupancyMap[i][j] = occupancyMap_flat[i * 1600 + j];
+    std::vector<std::vector<int>> occupancyMap(mapsize, std::vector<int>(mapsize, 0));
+    for (int i = 0; i < mapsize; ++i) {
+        for (int j = 0; j < mapsize; ++j) {
+            occupancyMap[i][j] = occupancyMap_flat[i * mapsize + j];
         }
     }
     
     // Create a full-sized convolution result matrix.
-    std::vector<std::vector<int>> convResult(1600, std::vector<int>(1600, 0));
-    std::vector<std::vector<int>> bestConvResult(1600, std::vector<int>(1600, 0));
+    std::vector<std::vector<int>> convResult(mapsize, std::vector<int>(mapsize, 0));
+    std::vector<std::vector<int>> bestConvResult(mapsize, std::vector<int>(mapsize, 0));
     
     std::vector<ScanResult> coarseResults;
     
@@ -109,7 +110,7 @@ extern "C" void convolve_lidar_scan_c_coarse_fine(
         // Compute convolution score for this angle.
         int currentScore = compute_convolution_score(
             x_rotated, y_rotated, occupancyMap, convResult,
-            startX, endX, startY, endY, startAngle, windowsize);
+            startX, endX, startY, endY, startAngle, windowsize,mapsize);
         
         coarseResults.push_back({currentScore, angle});
     }
@@ -121,7 +122,7 @@ extern "C" void convolve_lidar_scan_c_coarse_fine(
     
     // Fine search: for the top 5 coarse angles, check ±5° in 1° increments.
     ScanResult bestOverall = {0, 0};
-    std::vector<std::vector<int>> bestFineConvResult(1600, std::vector<int>(1600, 0));
+    std::vector<std::vector<int>> bestFineConvResult(mapsize, std::vector<int>(mapsize, 0));
     
     int numCandidates = std::min(3, (int)coarseResults.size());
     for (int idx = 0; idx < numCandidates; ++idx) {
@@ -145,7 +146,7 @@ extern "C" void convolve_lidar_scan_c_coarse_fine(
             // Compute convolution score for this fine angle.
             int currentScore = compute_convolution_score(
                 x_rotated, y_rotated, occupancyMap, convResult,
-                startX, endX, startY, endY, startAngle, windowsize);
+                startX, endX, startY, endY, startAngle, windowsize,mapsize);
             
             if (currentScore > bestOverall.score) {
                 bestOverall.score = currentScore;
@@ -163,7 +164,7 @@ extern "C" void convolve_lidar_scan_c_coarse_fine(
     // (Only the region [startX, endX) x [startY, endY) is copied.)
     for (int i = startX; i < endX; ++i) {
         for (int j = startY; j < endY; ++j) {
-            result[i * 1600 + j] = bestFineConvResult[i][j];
+            result[i * mapsize + j] = bestFineConvResult[i][j];
         }
     }
     

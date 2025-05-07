@@ -28,7 +28,9 @@ setup(
 
             'control_amcl = control_loop.control_amcl:main',
 
-            'control_odom = control_loop.control_loop_neural_conv_anticipate_odom:main'
+            'control_odom = control_loop.control_loop_neural_conv_anticipate_odom:main',
+
+            'control_true = control_loop.control_loop_true:main',
         ],
     },
 )

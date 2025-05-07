@@ -35,8 +35,9 @@ class AckermannLineFollower(AckermannLineConvParent):
         self.driftpose = None
         self.driftodom = None
         self.has_drifted = False
+        self.max_speed = 8.
 
-        self.drift_detection_timer = self.create_timer(0.05, self.drift_detection)
+        self.drift_detection_timer = self.create_timer(0.025, self.drift_detection)
 
 
         
@@ -79,7 +80,8 @@ class AckermannLineFollower(AckermannLineConvParent):
                     90,
                     result.ravel(),
                     ctypes.byref(best_sum),
-                    ctypes.byref(best_angle)
+                    ctypes.byref(best_angle),
+                    int(self.map_size)
                 )
 
                 #If best angle is more different than 90 degrees, it is probably wrong, so we ignore it
@@ -90,7 +92,7 @@ class AckermannLineFollower(AckermannLineConvParent):
                 best_xy = np.where(result == best_sum.value)
                 if len(best_xy[0]) > 1:
                     best_xy = (np.array([np.mean(best_xy[0])]), np.array([np.mean(best_xy[1])]))
-                y_coord = (((800 - abs(self.origin[1] / self.map_resolution)) * 2 - self.origin[1] / self.map_resolution) - best_xy[0][0]) * self.map_resolution
+                y_coord = (((self.map_size/2 - abs(self.origin[1] / self.map_resolution)) * 2 - self.origin[1] / self.map_resolution) - best_xy[0][0]) * self.map_resolution
                 x_coord = (best_xy[1][0] + self.origin[0] / self.map_resolution) * self.map_resolution
 
 
@@ -102,7 +104,7 @@ class AckermannLineFollower(AckermannLineConvParent):
                     self.current_yaw = self.current_yaw + self.cumulative_delta[2]
                     
 
-                    flipped_y_origin = (800 - abs(self.origin[1]/self.map_resolution))*2-self.origin[1]/self.map_resolution
+                    flipped_y_origin = (self.map_size/2 - abs(self.origin[1]/self.map_resolution))*2-self.origin[1]/self.map_resolution
                     
                     #set axis as 0-1600
                     #plt.axis([0, 1600, 0, 1600])
@@ -113,15 +115,15 @@ class AckermannLineFollower(AckermannLineConvParent):
                     y_estimate = -self.origin[0] / self.map_resolution+self.current_x/self.map_resolution
                     x_estimate = flipped_y_origin-self.current_y/self.map_resolution
 
-                    self.xRange = [int(x_estimate - self.rangesize), int(x_estimate + self.rangesize)]
-                    self.yRange = [int(y_estimate - self.rangesize), int(y_estimate + self.rangesize)]
+                    self.xRange = [max(0,int(x_estimate - self.rangesize)), min(self.map_size-1,int(x_estimate + self.rangesize))]
+                    self.yRange = [max(0,int(y_estimate - self.rangesize)), min(self.map_size-1,int(y_estimate + self.rangesize))]
                     
 
 
                 else:
-                    self.xRange = [int(best_xy[0][0] - self.rangesize), int(best_xy[0][0] + self.rangesize)]
-                    self.yRange = [int(best_xy[1][0] - self.rangesize), int(best_xy[1][0] + self.rangesize)]
-                    
+                    self.xRange = [max(0, int(best_xy[0][0] - self.rangesize)), min(self.map_size - 1, int(best_xy[0][0] + self.rangesize))]
+                    self.yRange = [max(0, int(best_xy[1][0] - self.rangesize)), min(self.map_size - 1, int(best_xy[1][0] + self.rangesize))]
+
                     # Update current pose based on the processed scan
                     self.current_x = x_coord#(x_coord + self.current_x)/2
                     self.current_y = y_coord#(y_coord + self.current_y)/2
@@ -183,11 +185,20 @@ class AckermannLineFollower(AckermannLineConvParent):
             percentage_diff_y = abs(abs(diff_y-diff_odom_y) / ((diff_y+diff_odom_y)/2))
             #If the difference is greater than 10%, we have a drift
 
+            #Get the normalized percentage diff vector
+            percentage_diff_total = np.sqrt(percentage_diff_x**2+percentage_diff_y**2)/np.sqrt(2)
+
 
             self._logger.info(f"Drift detection: {percentage_diff_x}, {percentage_diff_y}")
-            if (percentage_diff_x > 0.05 or percentage_diff_y > 0.05) and self.speed >= 5.:
+            if (percentage_diff_total>0.05) and self.speed >= 5.:
                 self._logger.info("Drift detected")
                 self.has_drifted = True
+
+                #We should add the difference between diff_x and diff_odom_x and diff_y and diff_odom_y to the current pose
+                self.current_x = self.current_x + (diff_x - diff_odom_x)/2.
+                self.current_y = self.current_y + (diff_y - diff_odom_y)/2.
+
+
             else:
                 self.has_drifted = False
                 

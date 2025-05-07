@@ -27,8 +27,8 @@ from tf_transformations import euler_from_quaternion
 class AckermannLineFollower(AckermannLineParent):
     def __init__(self):
         AckermannLineParent.__init__(self)
-        #self.robot_pose_sub = self.create_subscription(Pose2D, 'robot_pose', self.slam_set_pose, 1)
-        self.odom_subber = self.create_subscription(Odometry, 'ego_racecar/odom', self.slam_set_pose_odom, 1)
+        self.robot_pose_sub = self.create_subscription(Pose2D, 'robot_pose', self.slam_set_pose, 1)
+        #self.odom_subber = self.create_subscription(Odometry, 'ego_racecar/odom', self.slam_set_pose_odom, 1)
         self.max_speed=5.
 
 
