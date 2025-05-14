@@ -43,22 +43,25 @@ class AckermannLineFollower(AckermannLineParent):
             print("current yaw: ", self.current_yaw)
         self.initizalized = True
 
+    
 
-    def slam_set_pose_odom(self,msg):
-        #Get the Odometry from the message
-        if self.initizalized:
-            self.current_x = msg.pose.pose.position.x
-            self.current_y = msg.pose.pose.position.y
-            _, _, self.current_yaw = euler_from_quaternion([msg.pose.pose.orientation.x,
-                                                         msg.pose.pose.orientation.y,
-                                                         msg.pose.pose.orientation.z,
-                                                         msg.pose.pose.orientation.w])
+
+    #For Mapping with SLAM.
+    # def slam_set_pose_odom(self,msg):
+    #     #Get the Odometry from the message
+    #     if self.initizalized:
+    #         self.current_x = msg.pose.pose.position.x
+    #         self.current_y = msg.pose.pose.position.y
+    #         _, _, self.current_yaw = euler_from_quaternion([msg.pose.pose.orientation.x,
+    #                                                      msg.pose.pose.orientation.y,
+    #                                                      msg.pose.pose.orientation.z,
+    #                                                      msg.pose.pose.orientation.w])
             
             
-            print("current x: ", self.current_x)
-            print("current y: ", self.current_y)
-            print("current yaw: ", self.current_yaw)
-        self.initizalized = True
+    #         print("current x: ", self.current_x)
+    #         print("current y: ", self.current_y)
+    #         print("current yaw: ", self.current_yaw)
+    #     self.initizalized = True
 
 
 def main(args=None):

@@ -325,18 +325,20 @@ class AckermannLineParent(Node):
             self.publisher_.publish(msg)
 
     def check_jump(self,target_x,target_y):
-            x_linspace = np.linspace(self.old_estimate_pose[0],self.current_x,5)
-            y_linspace = np.linspace(self.old_estimate_pose[1],self.current_y,5)
+            if self.initizalized:
+                x_linspace = np.linspace(self.old_estimate_pose[0],self.current_x,5)
+                y_linspace = np.linspace(self.old_estimate_pose[1],self.current_y,5)
 
-                #Check if any distance was under 1:
+                    #Check if any distance was under 1:
 
-            for pair in zip(x_linspace,y_linspace):
-                    dx_line = math.hypot(target_x - pair[0], target_y-pair[1])
-                    if dx_line < 1:
-                        self.jumped_past = True
-                        self._logger.info(f"Jumped past target: {pair[0]}, {pair[1]}")
-                        break
-            return
+                for pair in zip(x_linspace,y_linspace):
+                        dx_line = math.hypot(target_x - pair[0], target_y-pair[1])
+                        if dx_line < 1:
+                            self.jumped_past = True
+                            break
+                return
+            else:
+                return
 
     def read_pgm(self,filename, byteorder='>'):
         with open(filename, 'rb') as f:
@@ -379,6 +381,7 @@ class AckermannLineParent(Node):
             #if image is larger than 1600x1600, crop it
 
             #plot it
+            
 
 
             return image, image_ouput
@@ -494,8 +497,8 @@ class AckermannLineConvParent(AckermannLineParent):
 
                 self.xRange = [max(0, int(best_xy[0][0] - self.rangesize)), min(self.map_size - 1, int(best_xy[0][0] + self.rangesize))]
                 self.yRange = [max(0, int(best_xy[1][0] - self.rangesize)), min(self.map_size - 1, int(best_xy[1][0] + self.rangesize))]
-                self._logger.info(f"X range: {self.xRange}")
-                self._logger.info(f"Y range: {self.yRange}")
+                #self._logger.info(f"X range: {self.xRange}")
+                #self._logger.info(f"Y range: {self.yRange}")
 
                 # Update current pose based on the processed scan
                 self.current_x = x_coord#(x_coord + self.current_x)/2

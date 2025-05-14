@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 class AckermannLineFollower(AckermannLineParent):
     def __init__(self):
         AckermannLineParent.__init__(self)
-        self.max_speed = 7.
+        self.max_speed = 8.
         self.robot_pose_sub = self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self.amcl_set_pose, 1)
 
     def amcl_set_pose(self, msg):

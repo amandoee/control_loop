@@ -28,6 +28,7 @@ import yaml
 class AckermannLineFollower(AckermannLineConvParent):
     def __init__(self):
         AckermannLineConvParent.__init__(self)
+        self.max_speed = 5.
 
 
     

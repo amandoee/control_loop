@@ -35,7 +35,7 @@ class AckermannLineFollower(AckermannLineConvParent):
         self.driftpose = None
         self.driftodom = None
         self.has_drifted = False
-        self.max_speed = 8.
+        self.max_speed = 5.
 
         self.drift_detection_timer = self.create_timer(0.025, self.drift_detection)
 
@@ -189,8 +189,8 @@ class AckermannLineFollower(AckermannLineConvParent):
             percentage_diff_total = np.sqrt(percentage_diff_x**2+percentage_diff_y**2)/np.sqrt(2)
 
 
-            self._logger.info(f"Drift detection: {percentage_diff_x}, {percentage_diff_y}")
             if (percentage_diff_total>0.05) and self.speed >= 5.:
+                #TODO: Vi bør tjekke at der i det hele taget er blevet minimum ét scan siden, ellers er dette bare angående hvor hurtigt vi kører!
                 self._logger.info("Drift detected")
                 self.has_drifted = True
 
@@ -201,6 +201,10 @@ class AckermannLineFollower(AckermannLineConvParent):
 
             else:
                 self.has_drifted = False
+
+
+
+        
                 
 
                 
