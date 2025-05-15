@@ -1,5 +1,5 @@
 method,overall_mean_pos_err,overall_median_pos_err,overall_rmse_pos_err,overall_max_pos_err,overall_mean_yaw_err_deg,overall_median_yaw_err_deg,overall_rmse_yaw_err_deg,overall_max_yaw_err_deg
 amcl,0.2935,0.213,0.4027,2.5498,1.7916,0.9537,2.9219,164.0019
-conv,2.5404,0.2254,9.0337,54.6275,11.9686,3.6301,33.3919,179.9948
+conv,0.2332,0.2145,0.2701,2.2903,4.4843,3.2913,6.2343,148.9786
 odom,0.2221,0.1986,0.2792,2.6077,4.3734,3.0242,6.6546,172.7518
 slam,0.3968,0.3714,0.4633,1.3531,5.069,3.3252,7.7008,158.1559
