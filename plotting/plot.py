@@ -52,7 +52,7 @@ def read_pgm(filename, byteorder='>'):
     
         
 # Read CSV file
-df = pd.read_csv('/home/f1t/au_f1tenth_ws/control_loop/plotting/lidar_data.csv', sep=";")
+df = pd.read_csv('/home/amandoee/control_loop/plotting/lidar_data_recent.csv', sep=";")
 
 
 def get_scan_from_index(index):
@@ -100,7 +100,7 @@ def get_scan_from_index(index):
         
     angles = np.linspace(angle_min, angle_max, len(ranges))
     valid_ranges = np.array(ranges)
-    valid = (valid_ranges >= range_min) & (valid_ranges <= 31)
+    valid = (valid_ranges >= range_min) & (valid_ranges <= 29.9)
 
     y_lidar = valid_ranges[valid] * np.sin(angles[valid])
     x_lidar = valid_ranges[valid] * np.cos(angles[valid])
@@ -146,9 +146,10 @@ def plot_result(output,coordinates_with_data):
 import ctypes
 def convolve_lidar_scan(x_lidar_local, y_lidar_local,coordinates_with_data,orientation_in_rad,xRange,yRange):
     
-    #lib = ctypes.CDLL('/home/f1t/au_f1tenth_ws/control_loop/refined180range.so')
+    #lib = ctypes.CDLL('/home/amandoee/control_loop/refined180range.so')
+    lib = ctypes.CDLL('/home/amandoee/control_loop/speeduprefined_dynamicmap.so')
 
-    lib = ctypes.CDLL('/home/f1t/au_f1tenth_ws/control_loop/plotting/cuda.so')
+    #lib = ctypes.CDLL('/home/amandoee/control_loop/plotting/cuda.so')
 
 
     # Set argument types and return type for the C wrapper
@@ -166,6 +167,7 @@ def convolve_lidar_scan(x_lidar_local, y_lidar_local,coordinates_with_data,orien
         np.ctypeslib.ndpointer(dtype=np.int32, flags='C_CONTIGUOUS'),
         ctypes.POINTER(ctypes.c_int),
         ctypes.POINTER(ctypes.c_int),
+        ctypes.c_int,
     ]
     lib.convolve_lidar_scan_c_coarse_fine.restype = None
 
@@ -204,9 +206,7 @@ def convolve_lidar_scan(x_lidar_local, y_lidar_local,coordinates_with_data,orien
     import time
     start = time.time()
 
-    
-
-    lib.convolve_lidar_scan_c_coarse_fine(x_lidar_local, y_lidar_local, len(x_lidar_local), coordinates_with_data.ravel(), int(xRange[0]),int(xRange[1]),int(yRange[0]),int(yRange[1]),0,180, result.ravel(),ctypes.byref(sum),ctypes.byref(best_angle))
+    lib.convolve_lidar_scan_c_coarse_fine(x_lidar_local, y_lidar_local, len(x_lidar_local), coordinates_with_data.ravel(), int(xRange[0]),int(xRange[1]),int(yRange[0]),int(yRange[1]),0,180, result.ravel(),ctypes.byref(sum),ctypes.byref(best_angle),1600)
 
         
     if sum.value > best_sum.value:
@@ -244,13 +244,12 @@ def convolve_lidar_scan(x_lidar_local, y_lidar_local,coordinates_with_data,orien
 import random
 #Random number for random lidar sample
 
-random_sample = random.randint(0, len(df)+100)
-random_sample = 0
-
+#random_sample = random.randint(0, len(df)-30)
+random_sample = 1
 values = []
 targets = []
 
-for i in range(random_sample,random_sample+10):
+for i in range(random_sample,random_sample+1):
     _, x_lidar_local, y_lidar_local,x_coord,y_coord, orientation_in_rad = get_scan_from_index(i)
 
     #plt.scatter(x_lidar_local[::8]/resolution, y_lidar_local[::8]/resolution, c='b', marker='o', label='LiDAR')
@@ -265,13 +264,13 @@ for i in range(random_sample,random_sample+10):
     print("Start position: ", -origin[0]/resolution+x_coord/resolution, flipped_y_origin-y_coord/resolution, orientation_in_rad)
     targets.append((-origin[0]/resolution+x_coord/resolution,flipped_y_origin-y_coord/resolution))
     #plt.legend()
-    map, coordinates_with_data = read_pgm('/home/f1t/au_f1tenth_ws/control_loop/maps/map0.pgm')
+    map, coordinates_with_data = read_pgm('/home/amandoee/control_loop/maps/map0.pgm')
 
 
-    xRangeStart = -origin[0]/resolution+x_coord/resolution-33
-    xRangeEnd = -origin[0]/resolution+x_coord/resolution+33
-    yRangeStart = flipped_y_origin-y_coord/resolution-33
-    yRangeEnd = flipped_y_origin-y_coord/resolution+33
+    xRangeStart = 0#-origin[0]/resolution+x_coord/resolution-300
+    xRangeEnd = 1600#-origin[0]/resolution+x_coord/resolution+300
+    yRangeStart = 0#flipped_y_origin-y_coord/resolution-300
+    yRangeEnd = 1600#flipped_y_origin-y_coord/resolution+300
 
     x_val,y_val,orientation_val = convolve_lidar_scan(x_lidar_local=x_lidar_local, y_lidar_local=y_lidar_local,coordinates_with_data=coordinates_with_data,orientation_in_rad=orientation_in_rad,xRange=(yRangeStart,yRangeEnd),yRange=(xRangeStart,xRangeEnd))
     values.append((x_val,y_val,orientation_val))
@@ -282,7 +281,7 @@ mse = 0
 for i in range(len(values)):
     mse += (targets[i][0]-values[i][0])**2 + (targets[i][1]-values[i][1])**2
 
-mse = mse/len(values)
+mse = (mse/len(values))
 
 print("Mean squared error: ", mse)
 
