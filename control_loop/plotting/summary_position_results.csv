@@ -1,0 +1,5 @@
+Method,Mean Position Error (m),Median Position Error (m),Max Position Error (m),Min Position Error (m),Std Dev Position Error (m)
+amcl,0.2935,0.213,2.5498,0.0002,0.2758
+conv,0.2332,0.2145,2.2903,0.0028,0.1363
+odom,0.2221,0.1986,2.6077,0.0005,0.1693
+slam,0.3968,0.3714,1.3531,0.0013,0.2392

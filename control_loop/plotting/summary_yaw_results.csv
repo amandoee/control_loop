@@ -1,0 +1,5 @@
+Method,Mean Yaw Error (degrees),Median Yaw Error (degrees),Max Yaw Error (degrees),Min Yaw Error (degrees),Std Dev Yaw Error (degrees)
+amcl,1.7916,0.9537,164.0019,0.0,2.3081
+conv,4.4843,3.2913,148.9786,0.0,4.331
+odom,4.3734,3.0242,172.7518,0.0,5.0158
+slam,5.069,3.3252,158.1559,0.0005,5.7972
